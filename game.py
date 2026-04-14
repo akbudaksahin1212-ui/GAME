@@ -1,143 +1,128 @@
 import streamlit as st
 import google.generativeai as genai
-import time
+import base64
+import os
 
-# --- 1. CONFIGURATION & SECRETS SETUP ---
+# --- 1. CONFIGURATION & SECRETS ---
 st.set_page_config(page_title="Forest Witch Potion Shop", layout="centered")
 
-# Streamlit Secrets'tan API anahtarını çekme
-# Not: Lokal çalışırken projenin ana dizininde .streamlit/secrets.toml dosyası oluşturmalısın
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
-except KeyError:
-    st.error("Lütfen .streamlit/secrets.toml dosyasında 'GEMINI_API_KEY' tanımlayın!")
+except Exception:
+    st.error("Lütfen .streamlit/secrets.toml dosyasına GEMINI_API_KEY ekleyin!")
     st.stop()
 
-# --- 2. ASSETS (GitHub Raw Linklerini Buraya Yapıştır) ---
-# Önemli: Linklerin 'raw.githubusercontent.com' ile başladığından emin ol!
-BG_URL = "https://raw.githubusercontent.com/KULLANICI/REPO/main/BG_1.png"
-BODY_URL = "https://raw.githubusercontent.com/KULLANICI/REPO/main/faceless_body.png"
-FACE_NORMAL = "https://raw.githubusercontent.com/KULLANICI/REPO/main/normal_face.png"
+# --- 2. GÖRSEL İŞLEME (BASE64) ---
+def get_base64(bin_file):
+    if os.path.exists(bin_file):
+        with open(bin_file, 'rb') as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    return ""
+
+# Görselleri Base64'e çeviriyoruz
+bg_64 = get_base64("BG_1.png")
+body_64 = get_base64("faceless_body.png")
+face_64 = get_base64("normal_face.png")
 
 # --- 3. PIXEL PERFECT CSS ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
-    /* Genel Pixel Art Ayarları */
     html, body, [class*="st-"] {{
         font-family: 'VT323', monospace;
         font-size: 22px;
         image-rendering: pixelated;
-        image-rendering: -moz-crisp-edges;
-        image-rendering: crisp-edges;
     }}
 
-    /* Oyun Ekranı Kutusu */
     .game-container {{
         position: relative;
         width: 100%;
-        height: 450px;
-        background-image: url('{BG_URL}');
+        height: 500px;
+        background-image: url("data:image/png;base64,{bg_64}");
         background-size: cover;
         background-position: center;
         border: 4px solid #3d5a44;
         overflow: hidden;
     }}
 
-    /* Cadı Katmanları */
     .layer {{
         position: absolute;
-        bottom: 10%;
-        left: 15%;
-        width: 280px;
+        bottom: 5%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 320px;
     }}
 
-    /* Floating Animation (Nefes Alma) */
+    /* Floating & Glow Animations */
     @keyframes float {{
-        0% {{ transform: translateY(0px); }}
-        50% {{ transform: translateY(-10px); }}
-        100% {{ transform: translateY(0px); }}
+        0% {{ transform: translate(-50%, 0px); }}
+        50% {{ transform: translate(-50%, -10px); }}
+        100% {{ transform: translate(-50%, 0px); }}
     }}
 
     .witch-animated {{
         animation: float 4s ease-in-out infinite;
     }}
 
-    /* Asa Parlama Efekti */
     .staff-glow {{
-        filter: drop-shadow(0 0 12px rgba(255, 223, 0, 0.7));
+        filter: drop-shadow(0 0 15px rgba(255, 223, 0, 0.8));
     }}
 
-    /* Chat Kutusu Stili */
     .stChatMessage {{
-        background-color: rgba(25, 35, 25, 0.9) !important;
+        background-color: rgba(20, 35, 20, 0.9) !important;
         border-radius: 0px !important;
         border-left: 5px solid #6b8e23 !important;
-        color: #f0f0f0 !important;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. SESSION STATE (Hafıza) ---
+# --- 4. SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-    
-if "witch_face" not in st.session_state:
-    st.session_state.witch_face = FACE_NORMAL
 
 # --- 5. AI ENGINE (Gemini) ---
 def get_witch_response(user_text):
     model = genai.GenerativeModel('gemini-2.5-flash-lite')
-    
-    # Cadı'nın Karakter Tanımı (System Instruction)
     system_instruction = (
-        "Sen bir Ghibli filmi cadısısın. Nazik, neşeli ama biraz da çatlak bir karakterin var. "
-        "Müşterilerin orman hayvanları ve dertleri çok absürt. "
-        "Örneğin bir sincap 'palamutlarımın tadı brokoliye döndü' diyebilir. "
-        "Onlara bahçendeki hayali bitkilerle (Giggle-Spore, Static-Fern, Whistling Hemlock) "
-        "komik çözümler öner. Kısa, büyülü ve pixel-art RPG oyununa uygun konuş."
+        "Sen neşeli ve biraz çatlak bir doğa cadısısın. Müşterilerin orman hayvanları "
+        "ve dertleri çok absürt. Onlara bahçendeki hayali bitkilerle komik çözümler öner. "
+        "Kısa ve pixel-art bir RPG'ye uygun konuş."
     )
-    
-    # Geçmişi de dahil ederek konuşmayı sürdür
     chat = model.start_chat(history=[])
-    full_prompt = f"{system_instruction}\n\nKullanıcı (Hayvan): {user_text}"
-    
     try:
-        response = chat.send_message(full_prompt)
+        response = chat.send_message(f"{system_instruction}\n\nHayvan Dostun: {user_text}")
         return response.text
-    except Exception as e:
-        return f"Amanın! Kazan patladı galiba, bir hata oluştu: {str(e)}"
+    except:
+        return "Oh canım, kazanı karıştırırken bir şeyler ters gitti!"
 
-# --- 6. UI RENDER (Görsel Alan) ---
+# --- 6. UI RENDER ---
 st.title("🌿 İksir Bahçesi: Doğa Cadısı")
 
-# Oyun Ekranı: Katmanlar Üst Üste
+# Oyun Ekranı
 st.markdown(f"""
     <div class="game-container">
-        <img src="{BODY_URL}" class="layer witch-animated staff-glow">
-        <img src="{st.session_state.witch_face}" class="layer witch-animated">
+        <img src="data:image/png;base64,{body_64}" class="layer witch-animated staff-glow">
+        <img src="data:image/png;base64,{face_64}" class="layer witch-animated">
     </div>
     """, unsafe_allow_html=True)
 
 st.write("---")
 
-# Sohbet Geçmişi
+# Chat Akışı
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# Kullanıcı Girişi
 if prompt := st.chat_input("Derdini fısılda küçük dostum..."):
-    # Kullanıcı mesajını ekle
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
     
-    # Cadı'nın Yanıtı
     with st.chat_message("assistant"):
-        with st.spinner("İksiri karıştırıyorum..."):
+        with st.spinner("İksiri hazırlıyorum..."):
             response = get_witch_response(prompt)
             st.write(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
